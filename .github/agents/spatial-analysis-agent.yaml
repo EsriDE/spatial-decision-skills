@@ -1,0 +1,111 @@
+name: spatial-analysis-agent
+version: 0.1.0
+type: custom
+
+description: >
+  Autonomous assistant for GIS engineers and data scientists that performs
+  CRS-aware spatial analysis on vector and raster data to produce
+  decision-focused outputs (ranked sites, suitability scores, hotspot polygons,
+  and suitability rasters).
+
+capabilities:
+  - ingest: [GeoJSON, Shapefile, GeoTIFF, COG]
+  - reprojection: CRS-aware reprojection and validation
+  - raster_analytics: [slope, aspect, zonal_stats, raster_math]
+  - vector_analytics: [buffer, spatial_join, intersection]
+  - spatial_statistics: [kde, getis_ord, clustering]
+  - outputs: [GeoJSON, CSV, GeoTIFF]
+  - large_data: windowed_reads, overviews, COG_support
+
+allowed_tools:
+  python_libs:
+    - geopandas
+    - rasterio
+    - rasterstats
+    - shapely
+    - pyproj
+    - numpy
+    - scipy
+    - scikit-learn
+    - pysal
+    - matplotlib
+    - contextily
+  cli_tools:
+    - gdal: [ogr2ogr, gdalwarp, gdal_translate, gdaladdo]
+  filesystem:
+    read: ["data/input/**"]
+    write: ["data/output/spatial-analysis-agent/**"]
+
+entrypoint: agents/spatial-analysis-agent/src/spatial_agent/agent.py
+
+input_schema:
+  - name: parcels
+    type: file
+    formats: [GeoJSON, Shapefile]
+    required: true
+    description: "Polygons with unique id field 'id'."
+  - name: dem
+    type: file
+    formats: [GeoTIFF]
+    required: true
+    description: "Single-band DEM."
+  - name: roads
+    type: file
+    formats: [GeoJSON, Shapefile]
+    required: false
+  - name: incidents
+    type: file
+    formats: [GeoJSON, Shapefile]
+    required: false
+  - name: params
+    type: json
+    required: false
+
+output_schema:
+  - name: ranked_parcels
+    type: file
+    format: GeoJSON
+    description: "FeatureCollection of parcels with properties: id, suitability_score, components, crs"
+  - name: suitability_raster
+    type: file
+    format: GeoTIFF
+    description: "Optional raster suitability surface (EPSG in metadata)"
+  - name: provenance_sidecar
+    type: file
+    format: JSON
+    description: "Metadata sidecar with input paths, checksums, params, steps"
+
+safety_privacy:
+  - "Do not exfiltrate PII or raw geometry to external services without explicit consent."
+  - "Strip or hash sensitive attributes by default when producing shared outputs."
+  - "Record provenance locally; do not include full input bytes in logs."
+
+provenance:
+  sidecar: true
+  fields: [input_files, parameters, processing_steps, utc_timestamp, checksums]
+
+install_notes: |
+  Recommended (conda-forge):
+    conda create -n spatial-env python=3.10 -y
+    conda activate spatial-env
+    conda install -c conda-forge geopandas rasterio rasterstats shapely pyproj numpy scipy scikit-learn pysal matplotlib contextily gdal -y
+  Pip alternative (may need GDAL binaries):
+    python -m pip install --upgrade pip
+    pip install geopandas rasterio rasterstats shapely pyproj numpy scipy scikit-learn pysal matplotlib contextily
+  Windows/GDAL hint: Prefer conda-forge or OSGeo4W for GDAL binaries.
+
+example:
+  description: "Rank parcels by suitability combining slope, distance-to-roads and incident hotspots."
+  invocation: |
+    spatial-analysis-agent --parcels data/input/parcels.geojson --dem data/input/dem.tif \
+      --roads data/input/roads.geojson --params agents/spatial-analysis-agent/examples/params.json \
+      --out-dir data/output/spatial-analysis-agent
+
+test_command: "pytest agents/spatial-analysis-agent/tests/test_compute_slope.py::test_slope_basic -q"
+
+default_output_dir: data/output/spatial-analysis-agent
+
+notes: |
+  - Outputs MUST include a properties.crs value (e.g., "EPSG:3857").
+  - Prefer decision-oriented outputs: ranked lists, scored GeoJSON, polygonized hotspots.
+  - Update this YAML when adding entrypoint implementation or CI integration.

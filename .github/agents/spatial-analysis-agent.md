@@ -1,3 +1,9 @@
+---
+name: spatial-analysis-agent
+description: "Autonomous assistant for GIS engineers and data scientists that performs CRS-aware spatial analysis to produce decision-focused outputs (ranked sites, suitability scores, hotspot polygons, and suitability rasters)."
+tools: ["read", "edit", "search"]
+---
+
 # spatial-analysis-agent
 
 ## Name
