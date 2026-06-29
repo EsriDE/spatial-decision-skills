@@ -1,5 +1,7 @@
 import os
 import sys
+import textwrap
+from datetime import datetime
 from getpass import getpass
 
 from arcgis.gis import GIS
@@ -48,7 +50,7 @@ def print_weather_warnings(portal: GIS):
         "layer": 0,
         "selectingLayer": 1,
         "spatialRel": "withinDistance",
-        "distance": 1500.0,
+        "distance": 50.0,
         "units": "Kilometers",
     }]
     nearby_weather_events_feature_collection: FeatureCollection = find_existing_locations(input_layers=input_layers, expressions=expressions)
@@ -56,15 +58,40 @@ def print_weather_warnings(portal: GIS):
     if len(nearby_weather_events_featureset.features) < 1:
         print("No weather events nearby...")
     else:
+        rows = []
+        details = []
         for weather_event_feature in nearby_weather_events_featureset.features:
-            region_name = weather_event_feature.attributes["NAME"]
-            effective_date = weather_event_feature.attributes["EFFECTIVE"]
-            expire_date = weather_event_feature.attributes["EXPIRES"]
-            certainty = weather_event_feature.attributes["CERTAINTY"]
-            headline = weather_event_feature.attributes["HEADLINE"]
-            description = weather_event_feature.attributes["DESCRIPTION"]
-            instructions = weather_event_feature.attributes["INSTRUCTION"]
-            print("...")
+            attributes = weather_event_feature.attributes
+            region_name = attributes.get("NAME")
+            effective_date = attributes.get("EFFECTIVE")
+            expire_date = attributes.get("EXPIRES")
+            certainty = attributes.get("CERTAINTY")
+            headline = attributes.get("HEADLINE")
+            description = attributes.get("DESCRIPTION")
+            instructions = attributes.get("INSTRUCTION")
+
+            rows.append(
+                [
+                    _shorten(region_name, 32),
+                    _shorten(headline, 48),
+                    _format_datetime(effective_date),
+                    _format_datetime(expire_date),
+                    _format_value(certainty),
+                ]
+            )
+            details.append((region_name, description, instructions))
+
+        headers = ["Region", "Headline", "Effective", "Expires", "Certainty"]
+        print("\nNearby weather events")
+        print(_build_table(headers, rows))
+
+        for index, (region_name, description, instructions) in enumerate(details, start=1):
+            region_label = _format_value(region_name)
+            print(f"\nEvent {index}: {region_label}")
+            if description:
+                print(f"  Description : {description}")
+            if instructions:
+                print(f"  Instructions: {instructions}")
 
 
 def _ensure_supported_python():
@@ -86,6 +113,44 @@ def _run_with_api_key(api_key: str) -> bool:
             return False
         raise
     return True
+
+
+def _format_value(value: object) -> str:
+    if value is None:
+        return "—"
+    text = str(value).strip()
+    return text if text else "—"
+
+
+def _format_datetime(value: object) -> str:
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M")
+    return _format_value(value)
+
+
+def _shorten(value: object, width: int) -> str:
+    text = _format_value(value)
+    return textwrap.shorten(text, width=width, placeholder="…")
+
+
+def _build_table(headers: list[str], rows: list[list[str]]) -> str:
+    column_widths = []
+    for index, header in enumerate(headers):
+        column_widths.append(
+            max(
+                len(header),
+                max((len(row[index]) for row in rows), default=len(header)),
+            )
+        )
+
+    separator = "+" + "+".join("-" * (width + 2) for width in column_widths) + "+"
+    row_template = "| " + " | ".join(f"{{:{width}}}" for width in column_widths) + " |"
+
+    lines = [separator, row_template.format(*headers), separator]
+    for row in rows:
+        lines.append(row_template.format(*row))
+    lines.append(separator)
+    return "\n".join(lines)
 
 
 def main():
